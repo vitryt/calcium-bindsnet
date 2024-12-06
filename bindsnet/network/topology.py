@@ -84,6 +84,11 @@ class AbstractConnection(ABC, Module):
 
         if self.update_rule is None:
             self.update_rule = NoOp
+        
+        from ..learning import CalciumBased
+        self.reset_learning = False
+        if self.update_rule == CalciumBased:
+            self.reset_learning = True
 
         self.update_rule = self.update_rule(
             connection=self,
@@ -140,6 +145,8 @@ class AbstractConnection(ABC, Module):
         """
         Contains resetting logic for the connection.
         """
+        if self.reset_learning:
+            self.update_rule.reset_state_variables()
 
 
 class AbstractMulticompartmentConnection(ABC, Module):

@@ -143,6 +143,112 @@ class NoOp(LearningRule):
         super().update()
 
 
+class CalciumBased(LearningRule):
+    # language=rst
+    """
+    Simple STDP rule involving both pre- and post-synaptic spiking activity. By default,
+    pre-synaptic update is negative and the post-synaptic update is positive.
+    """
+
+    def __init__(
+        self,
+        connection: AbstractConnection,
+        nu: Optional[Union[float, Sequence[float], Sequence[torch.Tensor]]] = None,
+        reduction: Optional[callable] = None,
+        weight_decay: float = 0.0,
+        **kwargs,
+    ) -> None:
+        # language=rst
+        """
+        Constructor for ``PostPre`` learning rule.
+
+        :param connection: An ``AbstractConnection`` object whose weights the
+            ``PostPre`` learning rule will modify.
+        :param nu: Single or pair of learning rates for pre- and post-synaptic events. It also
+            accepts a pair of tensors to individualize learning rates of each neuron.
+            In this case, their shape should be the same size as the connection weights.
+        :param reduction: Method for reducing parameter updates along the batch
+            dimension.
+        :param weight_decay: Coefficient controlling rate of decay of the weights each iteration.
+        """
+
+        super().__init__(
+            connection=connection,
+            nu=nu,
+            reduction=reduction,
+            weight_decay=weight_decay,
+            **kwargs,
+        )
+        self.calcium = None
+        # self.rho = None
+        self.input_factor = 100
+        self.output_factor = 400
+        self.dep_threshold = 2300
+        self.pot_threshold = 2500
+        self.potentiating_rate = 216.2
+        self.depressing_rate = 101.5/5
+        self.time_constant = 70*1000 *3# time dependent
+        self.calcium_time_constant = 200 #* 1000 # time dependent
+        self.truc = 0
+
+        assert (
+            self.source.traces and self.target.traces
+        ), "Both pre- and post-synaptic nodes must record spike traces."
+
+        if isinstance(connection, (Connection, LocalConnection)):
+            self.update = self._connection_update
+        # elif isinstance(connection, LocalConnection1D):
+        #     self.update = self._local_connection1d_update
+        # elif isinstance(connection, LocalConnection2D):
+        #     self.update = self._local_connection2d_update
+        # elif isinstance(connection, LocalConnection3D):
+        #     self.update = self._local_connection3d_update
+        # elif isinstance(connection, Conv1dConnection):
+        #     self.update = self._conv1d_connection_update
+        # elif isinstance(connection, Conv2dConnection):
+        #     self.update = self._conv2d_connection_update
+        # elif isinstance(connection, Conv3dConnection):
+        #     self.update = self._conv3d_connection_update
+        else:
+            raise NotImplementedError(
+                "This learning rule is not supported for this Connection type."
+            )
+
+    def _connection_update(self, **kwargs) -> None:
+        # language=rst
+        """
+        Post-pre learning rule for ``Connection`` subclass of ``AbstractConnection``
+        class.
+        """
+        if self.calcium == None:
+            self.calcium=torch.zeros_like(self.connection.w)
+            # self.rho = torch.ones_like(self.connection) * 0.5
+        batch_size = self.source.batch_size
+
+        self.calcium *= 1 - (1/self.calcium_time_constant)
+        self.calcium += self.source.s.view(self.calcium.shape[0],batch_size) * self.input_factor
+        self.calcium += self.target.s * self.output_factor
+
+        potentiating = self.calcium > self.pot_threshold
+        depressing = self.calcium > self.dep_threshold
+        # depressing = torch.logical_and(~potentiating, depressing)
+
+        # if not torch.logical_and(depressing,potentiating):
+        #     print(torch.logical_and(depressing,potentiating))
+        #     raise ValueError("A Synapse is both potentiating and depressing !!!")
+        rho = self.connection.w
+        self.connection.w += (-rho * (1-rho) * (0.25 - rho) + self.potentiating_rate * (1-rho) * (potentiating * 1) - self.depressing_rate * rho * (depressing * 1)) / self.time_constant
+        # self.connection.w = torch.softmax(self.connection.w)
+
+        # stat = torch.flatten(self.calcium)
+        # print(f"q1 : {stat.quantile(0.25)}, median : {stat.median()}, q3 : {stat.quantile(0.75)}, mean : {stat.mean()}, max : {stat.max()}")
+        super().update()
+
+    def reset_state_variables(self) -> None:
+        # self.calcium = None
+        self.calcium *= (1/self.calcium_time_constant) ** 150
+
+
 class PostPre(LearningRule):
     # language=rst
     """
@@ -178,7 +284,6 @@ class PostPre(LearningRule):
             weight_decay=weight_decay,
             **kwargs,
         )
-
         assert (
             self.source.traces and self.target.traces
         ), "Both pre- and post-synaptic nodes must record spike traces."

@@ -6,6 +6,7 @@ from scipy.spatial.distance import euclidean
 from torch.nn.modules.utils import _pair
 
 from bindsnet.learning import PostPre
+from bindsnet.learning import CalciumBased
 from bindsnet.network import Network
 from bindsnet.network.nodes import DiehlAndCookNodes, Input, LIFNodes
 from bindsnet.network.topology import Connection, LocalConnection
@@ -174,7 +175,8 @@ class DiehlAndCook2015(Network):
             source=input_layer,
             target=exc_layer,
             w=w,
-            update_rule=PostPre,
+            update_rule=CalciumBased,
+            # update_rule=PostPre,
             nu=nu,
             reduction=reduction,
             wmin=wmin,

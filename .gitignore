@@ -22,3 +22,5 @@ logs/*
 .pytest_cache/*
 .vscode/*
 data/*
+results/*
+test.ipynb

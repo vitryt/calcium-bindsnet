@@ -1,12 +1,17 @@
 import argparse
 import os
+import sys
 from time import time as t
+import pickle as pkl
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torchvision import transforms
 from tqdm import tqdm
+
+
+sys.path.append(os.getcwd())
 
 from bindsnet.analysis.plotting import (
     plot_assignments,
@@ -19,7 +24,7 @@ from bindsnet.analysis.plotting import (
 from bindsnet.datasets import MNIST
 from bindsnet.encoding import PoissonEncoder
 from bindsnet.evaluation import all_activity, assign_labels, proportion_weighting
-from bindsnet.models import DiehlAndCook2015
+from bindsnet.models import DiehlAndCook2015, DiehlAndCook2015v2
 from bindsnet.network.monitors import Monitor
 from bindsnet.utils import get_square_assignments, get_square_weights
 
@@ -99,6 +104,19 @@ network = DiehlAndCook2015(
     inpt_shape=(1, 28, 28),
 )
 
+
+# Build network.
+# network = DiehlAndCook2015v2(
+#     n_inpt=784,
+#     n_neurons=n_neurons,
+#     exc=exc,
+#     inh=inh,
+#     dt=dt,
+#     norm=78.4,
+#     theta_plus=theta_plus,
+#     inpt_shape=(1, 28, 28),
+# )
+
 # Directs network to GPU
 if gpu:
     network.to("cuda")
@@ -159,6 +177,16 @@ assigns_im = None
 perf_ax = None
 voltage_axes, voltage_ims = None, None
 
+
+drawing_indice = 0
+experiment_id = 3
+saving_path = "results/exp_" + str(experiment_id)
+if not os.path.exists(saving_path):
+    os.mkdir(saving_path)
+assignement_data = []
+save_model = True
+
+
 # Train the network.
 print("\nBegin training.\n")
 start = t()
@@ -181,7 +209,6 @@ for epoch in range(n_epochs):
         inputs = {"X": batch["encoded_image"].view(int(time / dt), 1, 1, 28, 28)}
         if gpu:
             inputs = {k: v.cuda() for k, v in inputs.items()}
-
         if step % update_interval == 0 and step > 0:
             # Convert the array of labels into a tensor
             label_tensor = torch.tensor(labels, device=device)
@@ -251,6 +278,9 @@ for epoch in range(n_epochs):
 
         # Optionally plot various simulation information.
         if plot:
+
+            saving_fig = False #(step % 50 == 0 and step > 0)
+            saving_val = (step % update_interval == 0 and step > 0)
             image = batch["image"].view(28, 28)
             inpt = inputs["X"].view(time, 784).sum(0).view(28, 28)
             input_exc_weights = network.connections[("X", "Ae")].w
@@ -263,20 +293,40 @@ for epoch in range(n_epochs):
             inpt_axes, inpt_ims = plot_input(
                 image, inpt, label=batch["label"], axes=inpt_axes, ims=inpt_ims
             )
+
             spike_ims, spike_axes = plot_spikes(spikes_, ims=spike_ims, axes=spike_axes)
-            weights_im = plot_weights(square_weights, im=weights_im)
-            assigns_im = plot_assignments(square_assignments, im=assigns_im)
-            perf_ax = plot_performance(accuracy, x_scale=update_interval, ax=perf_ax)
+
+            weights_im = plot_weights(square_weights, im=weights_im, save = ("results/"+str(drawing_indice)+"weight_image.png") if saving_fig else None)
+
+            assigns_im = plot_assignments(square_assignments, im=assigns_im, save = ("results/"+str(drawing_indice)+"assignment_image.png") if saving_fig else None)
+            
+            if saving_val:
+                assignement_data.append((square_weights, square_assignments))
+                with open(saving_path + "/assignment.pkl", "wb") as f:
+                    pkl.dump(assignement_data, f)
+            
+            perf_ax = plot_performance(accuracy, x_scale=update_interval, ax=perf_ax, save = ("results/"+str(drawing_indice)+"performance_image.png") if saving_fig else None)
+            
+            if saving_val:
+                with open(saving_path + "/accuracy.pkl", "wb") as f:
+                    pkl.dump(accuracy, f)
+                    torch.save(network.state_dict(), saving_path+"/model")
+
             voltage_ims, voltage_axes = plot_voltages(
                 voltages, ims=voltage_ims, axes=voltage_axes, plot_type="line"
             )
-
+            if saving_fig:
+                drawing_indice +=1
+                plt.pause(1)
+            
             plt.pause(1e-8)
-
         network.reset_state_variables()  # Reset state variables.
 
 print("Progress: %d / %d (%.4f seconds)" % (epoch + 1, n_epochs, t() - start))
 print("Training complete.\n")
+
+if save_model:
+    torch.save(network.state_dict(), saving_path+"/model")
 
 # Load MNIST data.
 test_dataset = MNIST(
