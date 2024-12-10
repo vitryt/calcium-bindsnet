@@ -149,3 +149,8 @@ Made with [contrib.rocks](https://contrib.rocks).
 
 ## License
 GNU Affero General Public License v3.0
+
+Linked with :
+- [[S1/Bio-Inspired AI/Seminar/calcium-bindsnet/examples/README|README]]
+- [[S1/Bio-Inspired AI/Seminar/calcium-bindsnet/bindsnet/environment/README|README]]
+- [[S1/Bio-Inspired AI/Seminar/calcium-bindsnet/bindsnet/datasets/README|README]]

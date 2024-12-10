@@ -189,7 +189,6 @@ class CalciumBased(LearningRule):
         self.depressing_rate = 101.5/5
         self.time_constant = 70*1000 *3# time dependent
         self.calcium_time_constant = 200 #* 1000 # time dependent
-        self.truc = 0
 
         assert (
             self.source.traces and self.target.traces

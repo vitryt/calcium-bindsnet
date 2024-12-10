@@ -47,6 +47,18 @@ parser.add_argument("--train", dest="train", action="store_true")
 parser.add_argument("--test", dest="train", action="store_false")
 parser.add_argument("--plot", dest="plot", action="store_true")
 parser.add_argument("--gpu", dest="gpu", action="store_true")
+
+parser.add_argument("--exp_id", type=int, default=0)
+parser.add_argument("--input_factor", type=int, default=100)
+parser.add_argument("--output_factor", type=int, default=400)
+parser.add_argument("--depression_threshold", type=int, default=2300)
+parser.add_argument("--potentiation_threshold", type=int, default=2500)
+parser.add_argument("--potentiating_rate", type=float, default=216.2)
+parser.add_argument("--depressing_rate", type=int, default=101.5)
+parser.add_argument("--time_constant", type=int, default=210000)
+parser.add_argument("--calcium_time_constant", type=int, default=200)
+
+
 parser.set_defaults(plot=True, gpu=True)
 
 args = parser.parse_args()
@@ -69,6 +81,16 @@ train = args.train
 plot = args.plot
 gpu = args.gpu
 
+experiment_id = args.exp_id
+imput_factor = args.input_factor
+output_factor = args.output_factor
+depression_threshold = args.depression_threshold
+potentiation_threshold = args.potentiation_threshold
+potentiating_rate = args.potentiating_rate
+depressing_rate = args.depressing_rate
+time_constant = args.time_constant
+calcium_time_constant = args.calcium_time_constant
+
 # Sets up Gpu use
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if gpu and torch.cuda.is_available():
@@ -88,6 +110,7 @@ if n_workers == -1:
 
 if not train:
     update_interval = n_test
+update_interval = 1000
 
 n_sqrt = int(np.ceil(np.sqrt(n_neurons)))
 start_intensity = intensity
@@ -179,7 +202,6 @@ voltage_axes, voltage_ims = None, None
 
 
 drawing_indice = 0
-experiment_id = 3
 saving_path = "results/exp_" + str(experiment_id)
 if not os.path.exists(saving_path):
     os.mkdir(saving_path)
@@ -290,31 +312,31 @@ for epoch in range(n_epochs):
             square_assignments = get_square_assignments(assignments, n_sqrt)
             spikes_ = {layer: spikes[layer].get("s") for layer in spikes}
             voltages = {"Ae": exc_voltages, "Ai": inh_voltages}
-            inpt_axes, inpt_ims = plot_input(
-                image, inpt, label=batch["label"], axes=inpt_axes, ims=inpt_ims
-            )
+            # inpt_axes, inpt_ims = plot_input(
+            #     image, inpt, label=batch["label"], axes=inpt_axes, ims=inpt_ims
+            # )
 
-            spike_ims, spike_axes = plot_spikes(spikes_, ims=spike_ims, axes=spike_axes)
+            # spike_ims, spike_axes = plot_spikes(spikes_, ims=spike_ims, axes=spike_axes)
 
-            weights_im = plot_weights(square_weights, im=weights_im, save = ("results/"+str(drawing_indice)+"weight_image.png") if saving_fig else None)
+            # weights_im = plot_weights(square_weights, im=weights_im, save = ("results/"+str(drawing_indice)+"weight_image.png") if saving_fig else None)
 
-            assigns_im = plot_assignments(square_assignments, im=assigns_im, save = ("results/"+str(drawing_indice)+"assignment_image.png") if saving_fig else None)
+            # assigns_im = plot_assignments(square_assignments, im=assigns_im, save = ("results/"+str(drawing_indice)+"assignment_image.png") if saving_fig else None)
             
             if saving_val:
                 assignement_data.append((square_weights, square_assignments))
                 with open(saving_path + "/assignment.pkl", "wb") as f:
                     pkl.dump(assignement_data, f)
             
-            perf_ax = plot_performance(accuracy, x_scale=update_interval, ax=perf_ax, save = ("results/"+str(drawing_indice)+"performance_image.png") if saving_fig else None)
+            # perf_ax = plot_performance(accuracy, x_scale=update_interval, ax=perf_ax, save = ("results/"+str(drawing_indice)+"performance_image.png") if saving_fig else None)
             
             if saving_val:
                 with open(saving_path + "/accuracy.pkl", "wb") as f:
                     pkl.dump(accuracy, f)
                     torch.save(network.state_dict(), saving_path+"/model")
 
-            voltage_ims, voltage_axes = plot_voltages(
-                voltages, ims=voltage_ims, axes=voltage_axes, plot_type="line"
-            )
+            # voltage_ims, voltage_axes = plot_voltages(
+            #     voltages, ims=voltage_ims, axes=voltage_axes, plot_type="line"
+            # )
             if saving_fig:
                 drawing_indice +=1
                 plt.pause(1)
