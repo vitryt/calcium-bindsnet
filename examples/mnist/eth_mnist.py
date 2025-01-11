@@ -216,147 +216,149 @@ if not os.path.exists(saving_path):
 assignement_data = []
 save_model = True
 
+if not os.path.exists("/data/4vitry/results/exp_" + str(experiment_id) + "/model"):
+    # Train the network.
+    print("\nBegin training.\n")
+    start = t()
+    for epoch in range(n_epochs):
+        labels = []
 
-# Train the network.
-print("\nBegin training.\n")
-start = t()
-for epoch in range(n_epochs):
-    labels = []
+        if epoch % progress_interval == 0:
+            print("Progress: %d / %d (%.4f seconds)" % (epoch, n_epochs, t() - start))
+            start = t()
 
-    if epoch % progress_interval == 0:
-        print("Progress: %d / %d (%.4f seconds)" % (epoch, n_epochs, t() - start))
-        start = t()
+        # Create a dataloader to iterate and batch data
+        dataloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=1, shuffle=True, num_workers=n_workers, pin_memory=gpu
+        )
 
-    # Create a dataloader to iterate and batch data
-    dataloader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=1, shuffle=True, num_workers=n_workers, pin_memory=gpu
-    )
+        for step, batch in enumerate(tqdm(dataloader)):
+            if step > n_train:
+                break
+            # Get next input sample.
+            inputs = {"X": batch["encoded_image"].view(int(time / dt), 1, 1, 28, 28)}
+            if gpu:
+                inputs = {k: v.cuda() for k, v in inputs.items()}
+            if step % update_interval == 0 and step > 0:
+                # Convert the array of labels into a tensor
+                label_tensor = torch.tensor(labels, device=device)
 
-    for step, batch in enumerate(tqdm(dataloader)):
-        if step > n_train:
-            break
-        # Get next input sample.
-        inputs = {"X": batch["encoded_image"].view(int(time / dt), 1, 1, 28, 28)}
-        if gpu:
-            inputs = {k: v.cuda() for k, v in inputs.items()}
-        if step % update_interval == 0 and step > 0:
-            # Convert the array of labels into a tensor
-            label_tensor = torch.tensor(labels, device=device)
-
-            # Get network predictions.
-            all_activity_pred = all_activity(
-                spikes=spike_record, assignments=assignments, n_labels=n_classes
-            )
-            proportion_pred = proportion_weighting(
-                spikes=spike_record,
-                assignments=assignments,
-                proportions=proportions,
-                n_labels=n_classes,
-            )
-
-            # Compute network accuracy according to available classification strategies.
-            accuracy["all"].append(
-                100
-                * torch.sum(label_tensor.long() == all_activity_pred).item()
-                / len(label_tensor)
-            )
-            accuracy["proportion"].append(
-                100
-                * torch.sum(label_tensor.long() == proportion_pred).item()
-                / len(label_tensor)
-            )
-
-            print(
-                "\nAll activity accuracy: %.2f (last), %.2f (average), %.2f (best)"
-                % (
-                    accuracy["all"][-1],
-                    np.mean(accuracy["all"]),
-                    np.max(accuracy["all"]),
+                # Get network predictions.
+                all_activity_pred = all_activity(
+                    spikes=spike_record, assignments=assignments, n_labels=n_classes
                 )
-            )
-            print(
-                "Proportion weighting accuracy: %.2f (last), %.2f (average), %.2f"
-                " (best)\n"
-                % (
-                    accuracy["proportion"][-1],
-                    np.mean(accuracy["proportion"]),
-                    np.max(accuracy["proportion"]),
+                proportion_pred = proportion_weighting(
+                    spikes=spike_record,
+                    assignments=assignments,
+                    proportions=proportions,
+                    n_labels=n_classes,
                 )
-            )
 
-            # Assign labels to excitatory layer neurons.
-            assignments, proportions, rates = assign_labels(
-                spikes=spike_record,
-                labels=label_tensor,
-                n_labels=n_classes,
-                rates=rates,
-            )
+                # Compute network accuracy according to available classification strategies.
+                accuracy["all"].append(
+                    100
+                    * torch.sum(label_tensor.long() == all_activity_pred).item()
+                    / len(label_tensor)
+                )
+                accuracy["proportion"].append(
+                    100
+                    * torch.sum(label_tensor.long() == proportion_pred).item()
+                    / len(label_tensor)
+                )
 
-            labels = []
+                print(
+                    "\nAll activity accuracy: %.2f (last), %.2f (average), %.2f (best)"
+                    % (
+                        accuracy["all"][-1],
+                        np.mean(accuracy["all"]),
+                        np.max(accuracy["all"]),
+                    )
+                )
+                print(
+                    "Proportion weighting accuracy: %.2f (last), %.2f (average), %.2f"
+                    " (best)\n"
+                    % (
+                        accuracy["proportion"][-1],
+                        np.mean(accuracy["proportion"]),
+                        np.max(accuracy["proportion"]),
+                    )
+                )
 
-        labels.append(batch["label"])
+                # Assign labels to excitatory layer neurons.
+                assignments, proportions, rates = assign_labels(
+                    spikes=spike_record,
+                    labels=label_tensor,
+                    n_labels=n_classes,
+                    rates=rates,
+                )
 
-        # Run the network on the input.
-        network.run(inputs=inputs, time=time)
+                labels = []
 
-        # Get voltage recording.
-        exc_voltages = exc_voltage_monitor.get("v")
-        inh_voltages = inh_voltage_monitor.get("v")
+            labels.append(batch["label"])
 
-        # Add to spikes recording.
-        spike_record[step % update_interval] = spikes["Ae"].get("s").squeeze()
+            # Run the network on the input.
+            network.run(inputs=inputs, time=time)
 
-        # Optionally plot various simulation information.
-        if plot:
+            # Get voltage recording.
+            exc_voltages = exc_voltage_monitor.get("v")
+            inh_voltages = inh_voltage_monitor.get("v")
 
-            saving_fig = False #(step % 50 == 0 and step > 0)
-            saving_val = (step % update_interval == 0 and step > 0)
-            image = batch["image"].view(28, 28)
-            inpt = inputs["X"].view(time, 784).sum(0).view(28, 28)
-            input_exc_weights = network.connections[("X", "Ae")].w
-            square_weights = get_square_weights(
-                input_exc_weights.view(784, n_neurons), n_sqrt, 28
-            )
-            square_assignments = get_square_assignments(assignments, n_sqrt)
-            spikes_ = {layer: spikes[layer].get("s") for layer in spikes}
-            voltages = {"Ae": exc_voltages, "Ai": inh_voltages}
-            # inpt_axes, inpt_ims = plot_input(
-            #     image, inpt, label=batch["label"], axes=inpt_axes, ims=inpt_ims
-            # )
+            # Add to spikes recording.
+            spike_record[step % update_interval] = spikes["Ae"].get("s").squeeze()
 
-            # spike_ims, spike_axes = plot_spikes(spikes_, ims=spike_ims, axes=spike_axes)
+            # Optionally plot various simulation information.
+            if plot:
 
-            # weights_im = plot_weights(square_weights, im=weights_im, save = ("results/"+str(drawing_indice)+"weight_image.png") if saving_fig else None)
+                saving_fig = False #(step % 50 == 0 and step > 0)
+                saving_val = (step % update_interval == 0 and step > 0)
+                image = batch["image"].view(28, 28)
+                inpt = inputs["X"].view(time, 784).sum(0).view(28, 28)
+                input_exc_weights = network.connections[("X", "Ae")].w
+                square_weights = get_square_weights(
+                    input_exc_weights.view(784, n_neurons), n_sqrt, 28
+                )
+                square_assignments = get_square_assignments(assignments, n_sqrt)
+                spikes_ = {layer: spikes[layer].get("s") for layer in spikes}
+                voltages = {"Ae": exc_voltages, "Ai": inh_voltages}
+                # inpt_axes, inpt_ims = plot_input(
+                #     image, inpt, label=batch["label"], axes=inpt_axes, ims=inpt_ims
+                # )
 
-            # assigns_im = plot_assignments(square_assignments, im=assigns_im, save = ("results/"+str(drawing_indice)+"assignment_image.png") if saving_fig else None)
-            
-            if saving_val:
-                assignement_data.append((square_weights, square_assignments))
-                with open(saving_path + "/assignment.pkl", "wb") as f:
-                    pkl.dump(assignement_data, f)
-            
-            # perf_ax = plot_performance(accuracy, x_scale=update_interval, ax=perf_ax, save = ("results/"+str(drawing_indice)+"performance_image.png") if saving_fig else None)
-            
-            if saving_val:
-                with open(saving_path + "/accuracy.pkl", "wb") as f:
-                    pkl.dump(accuracy, f)
-                    torch.save(network.state_dict(), saving_path+"/model")
+                # spike_ims, spike_axes = plot_spikes(spikes_, ims=spike_ims, axes=spike_axes)
 
-            # voltage_ims, voltage_axes = plot_voltages(
-            #     voltages, ims=voltage_ims, axes=voltage_axes, plot_type="line"
-            # )
-            if saving_fig:
-                drawing_indice +=1
-                plt.pause(1)
-            
-            plt.pause(1e-8)
-        network.reset_state_variables()  # Reset state variables.
+                # weights_im = plot_weights(square_weights, im=weights_im, save = ("results/"+str(drawing_indice)+"weight_image.png") if saving_fig else None)
 
-print("Progress: %d / %d (%.4f seconds)" % (epoch + 1, n_epochs, t() - start))
-print("Training complete.\n")
+                # assigns_im = plot_assignments(square_assignments, im=assigns_im, save = ("results/"+str(drawing_indice)+"assignment_image.png") if saving_fig else None)
+                
+                if saving_val:
+                    assignement_data.append((square_weights, square_assignments))
+                    with open(saving_path + "/assignment.pkl", "wb") as f:
+                        pkl.dump(assignement_data, f)
+                
+                # perf_ax = plot_performance(accuracy, x_scale=update_interval, ax=perf_ax, save = ("results/"+str(drawing_indice)+"performance_image.png") if saving_fig else None)
+                
+                if saving_val:
+                    with open(saving_path + "/accuracy.pkl", "wb") as f:
+                        pkl.dump(accuracy, f)
+                        torch.save(network.state_dict(), saving_path+"/model")
 
-if save_model:
-    torch.save(network.state_dict(), saving_path+"/model")
+                # voltage_ims, voltage_axes = plot_voltages(
+                #     voltages, ims=voltage_ims, axes=voltage_axes, plot_type="line"
+                # )
+                if saving_fig:
+                    drawing_indice +=1
+                    plt.pause(1)
+                
+                plt.pause(1e-8)
+            network.reset_state_variables()  # Reset state variables.
+
+    print("Progress: %d / %d (%.4f seconds)" % (epoch + 1, n_epochs, t() - start))
+    print("Training complete.\n")
+
+    if save_model:
+        torch.save(network.state_dict(), saving_path+"/model")
+else:
+    print("Model found, skipped training")
 
 # Load MNIST data.
 test_dataset = MNIST(
@@ -425,3 +427,6 @@ print("Proportion weighting accuracy: %.2f \n" % (accuracy["proportion"] / n_tes
 
 print("Progress: %d / %d (%.4f seconds)" % (epoch + 1, n_epochs, t() - start))
 print("Testing complete.\n")
+
+with open(saving_path + "/accuracy_test.pkl", "wb") as f:
+    pkl.dump(accuracy, f)
