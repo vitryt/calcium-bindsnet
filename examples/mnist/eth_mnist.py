@@ -57,7 +57,7 @@ parser.add_argument("--potentiating_rate", type=float, default=216.2)
 parser.add_argument("--depressing_rate", type=int, default=101.5)
 parser.add_argument("--time_constant", type=int, default=210000)
 parser.add_argument("--calcium_time_constant", type=int, default=200)
-
+parser.add_argument("--gpu_id", type=int, default=0)
 
 parser.set_defaults(plot=True, gpu=True)
 
@@ -90,6 +90,13 @@ potentiating_rate = args.potentiating_rate
 depressing_rate = args.depressing_rate
 time_constant = args.time_constant
 calcium_time_constant = args.calcium_time_constant
+gpu_id = args.gpu_id
+
+dataset_path = "/data/4vitry/MNIST"
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
 
 # Sets up Gpu use
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -125,6 +132,7 @@ network = DiehlAndCook2015(
     norm=78.4,
     theta_plus=theta_plus,
     inpt_shape=(1, 28, 28),
+    use_calcium=(experiment_id%2 == 0),
 )
 
 
@@ -148,7 +156,7 @@ if gpu:
 train_dataset = MNIST(
     PoissonEncoder(time=time, dt=dt),
     None,
-    root=os.path.join("..", "..", "data", "MNIST"),
+    root=os.path.join(dataset_path),
     download=True,
     train=True,
     transform=transforms.Compose(
@@ -202,7 +210,7 @@ voltage_axes, voltage_ims = None, None
 
 
 drawing_indice = 0
-saving_path = "results/exp_" + str(experiment_id)
+saving_path = "/data/4vitry/results/exp_" + str(experiment_id)
 if not os.path.exists(saving_path):
     os.mkdir(saving_path)
 assignement_data = []
@@ -354,7 +362,7 @@ if save_model:
 test_dataset = MNIST(
     PoissonEncoder(time=time, dt=dt),
     None,
-    root=os.path.join("..", "..", "data", "MNIST"),
+    root=os.path.join(dataset_path),
     download=True,
     train=False,
     transform=transforms.Compose(

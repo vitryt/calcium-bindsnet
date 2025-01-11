@@ -109,6 +109,7 @@ class DiehlAndCook2015(Network):
         inpt_shape: Optional[Iterable[int]] = None,
         inh_thresh: float = -40.0,
         exc_thresh: float = -52.0,
+        use_calcium: bool = False,
     ) -> None:
         # language=rst
         """
@@ -175,8 +176,7 @@ class DiehlAndCook2015(Network):
             source=input_layer,
             target=exc_layer,
             w=w,
-            update_rule=CalciumBased,
-            # update_rule=PostPre,
+            update_rule=(CalciumBased if use_calcium else PostPre),
             nu=nu,
             reduction=reduction,
             wmin=wmin,
